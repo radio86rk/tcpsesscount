@@ -24,9 +24,10 @@ struct tcp_ip_unit {
     u_char src_addr[4];
     u_char dst_addr[4];
     u_char flags;
+    u_char prev_flags;
     u_char cnt_push;
-    u_char cnt_fail;
-    u_char cnt_rst;
+    u_char cnt_fin;
+    u_char cnt_syn;
 };
 
 
@@ -76,25 +77,34 @@ delete_dead_session(u_int key,struct tcp_ip_unit *u)
 void
 update_session_status(u_int key,struct tcp_ip_unit *u)
 {
-    if (u->flags == (FLAG_SYN | FLAG_ACK)) {
-        active_sessions++;
+    if (u->flags == (FLAG_ACK)) {
+        if(u->cnt_fin == 2) {
+            finished_sessions++;
+            if(active_sessions > 0) active_sessions--;  
+            u->cnt_fin = 0;
+            delete_dead_session(key,u);
+            return;
+        }
+        if(u->prev_flags == (FLAG_SYN|FLAG_ACK)) {
+            active_sessions++;
+            u->cnt_syn = 0;
+        }
     }
-
+    else if(u->flags == (FLAG_FIN | FLAG_ACK))
+        u->cnt_fin++;
     else if(u->flags == (FLAG_PSH | FLAG_ACK)) {
        if(!u->cnt_push++)active_sessions++;
     }
-    else if (u->flags == (FLAG_FIN | FLAG_ACK)) {
-        if(!u->cnt_fail)finished_sessions++;
-        if(active_sessions > 0) active_sessions--;
-        if(++u->cnt_fail>=2)
+    else if (u->flags == FLAG_SYN) {
+        u->cnt_syn++;
+        if(u->cnt_syn > 3) {
+            failure_sessions++;
+            u->cnt_syn = 0;
             delete_dead_session(key,u);
+        }
     } 
-    else if(u->flags == FLAG_RST) {
-        if(!u->cnt_rst)failure_sessions++;
-        if(active_sessions > 0) active_sessions--;   
-        if(++u->cnt_rst>=2)
-            delete_dead_session(key,u);
-    }
+    else if(u->flags == FLAG_RST)
+        failure_sessions++;
 }
 
 struct tcp_ip_unit*
@@ -107,12 +117,12 @@ allocate_tcp_ip_unit(const struct tcp_ip_unit *u)
     }
     u_tmp->src_port = u->src_port;
     u_tmp->dst_port = u->dst_port;
-    u_tmp->flags = u->flags;
+    u_tmp->flags = u_tmp->prev_flags = u->flags;
     memcpy(u_tmp->src_addr,u->src_addr,4);
     memcpy(u_tmp->dst_addr,u->dst_addr,4);
     u_tmp->next = NULL;
-    u_tmp->cnt_fail = 0;
-    u_tmp->cnt_rst = 0;
+    u_tmp->cnt_fin = 0;
+    u_tmp->cnt_syn = 0;
     u_tmp->cnt_push = 0;
     return u_tmp;
 
@@ -136,6 +146,7 @@ check_by_hash_key(u_int key,const struct tcp_ip_unit *u)
           }
           head = head->next;
        }
+       head->prev_flags = head->flags;
        head->flags = u->flags;
        update_session_status(key,head);
     return 0;
@@ -162,12 +173,12 @@ disp_tcp_ip_data(u_char *user,const struct pcap_pkthdr *hdr,const u_char *data)
     struct tcp_ip_unit u;
     u.src_port =  *port_src;
     u.dst_port =  *port_dest;
-    u.flags = tcp_flags;
+    u.flags = u.prev_flags = tcp_flags;
     memcpy(u.src_addr,src_addr,4);
     memcpy(u.dst_addr,dest_addr,4);
     u.next = NULL;
-    u.cnt_fail = 0;
-    u.cnt_rst = 0;
+    u.cnt_fin = 0;
+    u.cnt_syn = 0;
     u.cnt_push = 0;
     check_by_hash_key(tcp_ip_hash_key,&u);
     #ifdef DEBUG_MODE
