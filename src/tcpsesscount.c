@@ -32,9 +32,10 @@ compare_addr_pair(const struct tcp_ip *addr1, const struct tcp_ip *addr2)
     int i;
     if((addr1->src_port != addr2->src_port) && (addr1->src_port != addr2->dst_port))return 0;
     if((addr1->dst_port != addr2->src_port) && (addr1->dst_port != addr2->dst_port))return 0;
-    for(i = 0; i < 4; i++)
-       if((addr1->src_addr[i] != addr2->src_addr[i]) && (addr1->src_addr[i] != addr2->dst_addr[i]))return 0;
-       if((addr1->dst_addr[i] != addr2->dst_addr[i]) && (addr1->dst_addr[i] != addr2->src_addr[i]))return 0;
+    for(i = 0; i < 4; i++) {
+        if((addr1->src_addr[i] != addr2->src_addr[i]) && (addr1->src_addr[i] != addr2->dst_addr[i]))return 0;
+        if((addr1->dst_addr[i] != addr2->dst_addr[i]) && (addr1->dst_addr[i] != addr2->src_addr[i]))return 0;
+    }
     return 1;
     
 }
@@ -120,10 +121,10 @@ check_by_hash_key(u_int key,const struct tcp_ip *u)
        }
        if (u->state == (FLAG_FIN | FLAG_ACK)) {
             finished_sessions++;
-            active_sessions--;
+            if(active_sessions > 0) active_sessions--;
        } 
        else if(u->state == FLAG_RST) {
-          active_sessions--;
+          if(active_sessions > 0) active_sessions--;
           failure_sessions++;         
        }
     return 0;
