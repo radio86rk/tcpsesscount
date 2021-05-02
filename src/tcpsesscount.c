@@ -30,11 +30,11 @@ u_char
 compare_addr_pair(const struct tcp_ip *addr1, const struct tcp_ip *addr2)
 {
     int i;
-    if((addr1->src_port != addr2->src_port) && (addr1->src_port != addr2->dst_port))return 0;
-    if((addr1->dst_port != addr2->src_port) && (addr1->dst_port != addr2->dst_port))return 0;
+    if((addr1->src_port != addr2->src_port || addr1->dst_port != addr2->dst_port) 
+        && (addr1->src_port != addr2->dst_port || addr1->dst_port != addr2->src_port))return 0;
     for(i = 0; i < 4; i++) {
-        if((addr1->src_addr[i] != addr2->src_addr[i]) && (addr1->src_addr[i] != addr2->dst_addr[i]))return 0;
-        if((addr1->dst_addr[i] != addr2->dst_addr[i]) && (addr1->dst_addr[i] != addr2->src_addr[i]))return 0;
+        if((addr1->src_addr[i] != addr2->src_addr[i] || addr1->dst_addr[i] != addr2->dst_addr[i]) 
+            && (addr1->src_addr[i] != addr2->dst_addr[i] || addr1->dst_addr[i] != addr2->src_addr[i]))return 0;
     }
     return 1;
     
@@ -72,7 +72,7 @@ delete_session(u_int key,struct tcp_ip *u)
 void
 check_sessions(u_int key,struct tcp_ip *u)
 {
-    if(u->state & FLAG_PSH || u->state & FLAG_SYN) {
+    if(u->state & FLAG_PSH || u->state == (FLAG_SYN | FLAG_ACK)) {
        active_sessions++;
        return;
     }
@@ -187,7 +187,7 @@ main(int argc, char **argv)
         return 1;
 
     }
-    printf("Active sessions: %d\t Finished sessions: %d\t Failure sessions: %d\n",active_sessions,finished_sessions,failure_sessions);
+    printf("Active sessions: %d\t Finished sessions: %d\t Failure sessions: %d\n",active_sessions,finished_sessions/2,failure_sessions);
     return 0;
 }
 
