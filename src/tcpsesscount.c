@@ -9,8 +9,8 @@
 #define FLAG_RST 4
 #define FLAG_PSH 8
 #define FLAG_ACK 16
+#define FLAG_URG 32
 #define MAX_HASH_KEY 255*8+65535*2
-
 
 struct tcp_ip_unit *hash_map[MAX_HASH_KEY] = {NULL};
 u_int active_sessions = 0;
@@ -18,12 +18,15 @@ u_int finished_sessions = 0;
 u_int failure_sessions = 0;
 
 struct tcp_ip_unit {
-    struct tcp_ip_unit *next; //Связный список коллизий
+    struct tcp_ip_unit *next;
     u_short src_port;
     u_short dst_port;
     u_char src_addr[4];
     u_char dst_addr[4];
     u_char flags;
+    u_char cnt_push;
+    u_char cnt_fail;
+    u_char cnt_rst;
 };
 
 
@@ -56,17 +59,42 @@ generate_hash_key(u_short src_port, u_short dst_port, u_char src_addr[], u_char 
 }
 
 void
+delete_dead_session(u_int key,struct tcp_ip_unit *u)
+{
+    struct tcp_ip_unit *tmp = hash_map[key];
+    if (tmp == u) {
+        free(u);
+        hash_map[key] = NULL;
+        return;
+    }
+    while(tmp->next != u)tmp=tmp->next;
+    tmp->next = u->next;
+    free(u);  
+
+}
+
+void
 update_session_status(u_int key,struct tcp_ip_unit *u)
 {
-    if(u->flags & FLAG_PSH || u->flags == (FLAG_SYN | FLAG_ACK)) {
-       active_sessions++;
-       return;
+    if (u->flags == (FLAG_SYN | FLAG_ACK)) {
+        active_sessions++;
     }
-    else if(u->flags == (FLAG_FIN | FLAG_ACK))
-       finished_sessions++;
-    else if(u->flags == FLAG_RST)
-       failure_sessions++;
 
+    else if(u->flags == (FLAG_PSH | FLAG_ACK)) {
+       if(!u->cnt_push++)active_sessions++;
+    }
+    else if (u->flags == (FLAG_FIN | FLAG_ACK)) {
+        if(!u->cnt_fail)finished_sessions++;
+        if(active_sessions > 0) active_sessions--;
+        if(++u->cnt_fail>=2)
+            delete_dead_session(key,u);
+    } 
+    else if(u->flags == FLAG_RST) {
+        if(!u->cnt_rst)failure_sessions++;
+        if(active_sessions > 0) active_sessions--;   
+        if(++u->cnt_rst>=2)
+            delete_dead_session(key,u);
+    }
 }
 
 struct tcp_ip_unit*
@@ -83,9 +111,13 @@ allocate_tcp_ip_unit(const struct tcp_ip_unit *u)
     memcpy(u_tmp->src_addr,u->src_addr,4);
     memcpy(u_tmp->dst_addr,u->dst_addr,4);
     u_tmp->next = NULL;
+    u_tmp->cnt_fail = 0;
+    u_tmp->cnt_rst = 0;
+    u_tmp->cnt_push = 0;
     return u_tmp;
 
 }
+
 
 u_char
 check_by_hash_key(u_int key,const struct tcp_ip_unit *u)
@@ -96,7 +128,6 @@ check_by_hash_key(u_int key,const struct tcp_ip_unit *u)
        return 0;
     } 
        struct tcp_ip_unit *head = hash_map[key]; 
-       struct tcp_ip_unit *found;
        while(!compare_addr_pair(head,u)) {
           if(head->next == NULL) {
              head->next = allocate_tcp_ip_unit(u);
@@ -105,21 +136,8 @@ check_by_hash_key(u_int key,const struct tcp_ip_unit *u)
           }
           head = head->next;
        }
-       found = head;
-       if (u->flags == (FLAG_FIN | FLAG_ACK)) {
-            if(found->flags != (FLAG_FIN | FLAG_ACK)) {
-                found->flags = FLAG_FIN | FLAG_ACK;
-                finished_sessions++;
-            }
-            if(active_sessions > 0) active_sessions--;
-       } 
-       else if(u->flags == FLAG_RST) {
-            if(found->flags != FLAG_RST) {
-                found->flags = FLAG_RST;
-                failure_sessions++;   
-            }
-          if(active_sessions > 0) active_sessions--;
-       }
+       head->flags = u->flags;
+       update_session_status(key,head);
     return 0;
 }
 
@@ -148,6 +166,9 @@ disp_tcp_ip_data(u_char *user,const struct pcap_pkthdr *hdr,const u_char *data)
     memcpy(u.src_addr,src_addr,4);
     memcpy(u.dst_addr,dest_addr,4);
     u.next = NULL;
+    u.cnt_fail = 0;
+    u.cnt_rst = 0;
+    u.cnt_push = 0;
     check_by_hash_key(tcp_ip_hash_key,&u);
     #ifdef DEBUG_MODE
     printf("src port %d  dest port %d   tcpip hash = %d  packet len = %d FLAGS: ",ntohs(*port_src),ntohs(*port_dest),tcp_ip_hash_key,ntohs(*ip_packet_len)-40);
