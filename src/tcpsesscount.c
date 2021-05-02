@@ -25,9 +25,6 @@ struct tcp_ip {
     struct tcp_ip *next; //Связный список коллизий
 };
 
-/*
- *При возникновении коллизий в хеш ф-ии, сраниваем два адреса, новый и уже захешированный, при совпадении возвращаем 1 
- **/
 
 u_char
 compare_addr_pair(const struct tcp_ip *addr1, const struct tcp_ip *addr2)
@@ -55,6 +52,7 @@ make_hash_tcpip(u_short src_port, u_short dst_port, u_char src_addr[], u_char ds
     }
     return r;  
 }
+
 void
 delete_session(u_int key,struct tcp_ip *u)
 {
@@ -73,15 +71,15 @@ delete_session(u_int key,struct tcp_ip *u)
 void
 check_sessions(u_int key,struct tcp_ip *u)
 {
-       if(u->state & FLAG_PSH || u->state & FLAG_SYN) {
-          active_sessions++;
-          return;
-       }
-       else if(u->state == (FLAG_FIN | FLAG_ACK))
-          finished_sessions++;
-       else if(u->state == FLAG_RST)
-          failure_sessions++;
-       delete_session(key,u);
+    if(u->state & FLAG_PSH || u->state & FLAG_SYN) {
+       active_sessions++;
+       return;
+    }
+    else if(u->state == (FLAG_FIN | FLAG_ACK))
+       finished_sessions++;
+    else if(u->state == FLAG_RST)
+       failure_sessions++;
+    delete_session(key,u);
 
 }
 
@@ -89,6 +87,10 @@ struct tcp_ip*
 allocate_tcpip_unit(const struct tcp_ip *u)
 {
     struct tcp_ip *u_tmp = malloc(sizeof(struct tcp_ip));
+    if (u_tmp == NULL) {
+        fprintf(stderr,"Error allocate memory\n");
+        exit(1);
+    }
     u_tmp->src_port =  u->src_port;
     u_tmp->dst_port =  u->dst_port;
     u_tmp->state = u->state;
