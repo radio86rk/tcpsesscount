@@ -90,6 +90,8 @@ update_session_status(u_int key,struct tcp_ip_unit *u)
             active_sessions++;
             u->cnt_syn = 0;
         }
+        if(u->prev_flags == FLAG_SYN && u->cnt_syn > 3)
+            delete_dead_session(key,u);
     }
     else if(u->flags == (FLAG_FIN | FLAG_ACK))
         u->cnt_fin++;
@@ -98,11 +100,8 @@ update_session_status(u_int key,struct tcp_ip_unit *u)
     }
     else if (u->flags == FLAG_SYN) {
         u->cnt_syn++;
-        if(u->cnt_syn > 3) {
+        if(u->cnt_syn == 4)
             failure_sessions++;
-            u->cnt_syn = 0;
-            delete_dead_session(key,u);
-        }
     }
 }
 
