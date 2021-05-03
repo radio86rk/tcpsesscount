@@ -103,9 +103,7 @@ update_session_status(u_int key,struct tcp_ip_unit *u)
             u->cnt_syn = 0;
             delete_dead_session(key,u);
         }
-    } 
-    else if(u->flags == FLAG_RST)
-        failure_sessions++;
+    }
 }
 
 struct tcp_ip_unit*
@@ -169,7 +167,6 @@ disp_tcp_ip_data(u_char *user,const struct pcap_pkthdr *hdr,const u_char *data)
         u_char icmp_type = data[begin_ip_header+ip_header_length];
         if(icmp_type == 3)
             failure_sessions++;
-        return;
     }
     if (proto != TCP_PROTO)return;
 
