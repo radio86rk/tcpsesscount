@@ -3,6 +3,7 @@
 #include <pcap.h>
 #include <arpa/inet.h>
 #include <string.h>
+#define ICMP_PROTO 1
 #define TCP_PROTO 6
 #define FLAG_FIN 1
 #define FLAG_SYN 2
@@ -163,8 +164,15 @@ disp_tcp_ip_data(u_char *user,const struct pcap_pkthdr *hdr,const u_char *data)
     u_char *dest_addr = &data[begin_ip_header+16];
     u_short *ip_packet_len = (u_short*)&data[begin_ip_header+2];
     u_char proto = data[begin_ip_header+9];
-    if(proto != TCP_PROTO)return;
     u_char ip_header_length = (data[begin_ip_header] & 15)*4;
+    if (proto == ICMP_PROTO) {
+        u_char icmp_type = data[begin_ip_header+ip_header_length];
+        if(icmp_type == 3)
+            failure_sessions++;
+        return;
+    }
+    if (proto != TCP_PROTO)return;
+
     u_short begin_tcp_header = begin_ip_header + ip_header_length;
     u_char tcp_flags = data[begin_tcp_header+13];
     u_short *port_src = (u_short*)&data[begin_tcp_header];
